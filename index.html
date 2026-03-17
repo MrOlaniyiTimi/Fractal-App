@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometric Fractal Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            margin: 0;
+            display: flex;
+        }
+        .controls-panel {
+            width: 320px;
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 24px;
+            overflow-y: auto;
+            z-index: 10;
+        }
+        .canvas-container {
+            flex-grow: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+        }
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            cursor: crosshair;
+        }
+        input[type="range"] {
+            width: 100%;
+            accent-color: #3b82f6;
+        }
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            font-size: 0.875rem;
+            color: #94a3b8;
+        }
+        .control-group {
+            margin-bottom: 20px;
+        }
+        select, button {
+            width: 100%;
+            background: #334155;
+            border: 1px solid #475569;
+            color: white;
+            padding: 8px;
+            border-radius: 6px;
+            outline: none;
+        }
+        button:hover {
+            background: #475569;
+        }
+        .active-btn {
+            background: #3b82f6 !important;
+        }
+    </style>
+</head>
+<body>
+
+<div class="controls-panel">
+    <h1 class="text-xl font-bold mb-6 flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="m19 9-7 7-7-7"/></svg>
+        Fractal Studio
+    </h1>
+
+    <div class="control-group">
+        <label class="slider-label"><span>Root Shape</span></label>
+        <select id="shapeSelect">
+            <option value="3">Triangle</option>
+            <option value="4" selected>Square</option>
+            <option value="6">Hexagon</option>
+            <option value="0">Circle</option>
+        </select>
+    </div>
+
+    <div class="control-group">
+        <div class="slider-label">
+            <span>Recursion Depth</span>
+            <span id="depthVal">4</span>
+        </div>
+        <input type="range" id="depth" min="1" max="7" step="1" value="4">
+    </div>
+
+    <div class="control-group">
+        <div class="slider-label">
+            <span>Branch Scale</span>
+            <span id="scaleVal">0.50</span>
+        </div>
+        <input type="range" id="scale" min="0.1" max="0.8" step="0.01" value="0.5">
+    </div>
+
+    <div class="control-group">
+        <div class="slider-label">
+            <span>Rotation Step (°)</span>
+            <span id="rotateVal">0</span>
+        </div>
+        <input type="range" id="rotate" min="-180" max="180" step="1" value="0">
+    </div>
+
+    <div class="control-group">
+        <div class="slider-label">
+            <span>Spread Angle (°)</span>
+            <span id="spreadVal">0</span>
+        </div>
+        <input type="range" id="spread" min="0" max="360" step="1" value="0">
+    </div>
+
+    <div class="control-group">
+        <label class="slider-label"><span>Color Palette</span></label>
+        <select id="colorScheme">
+            <option value="cyan">Electric Cyan</option>
+            <option value="sunset">Sunset Gold</option>
+            <option value="matrix">Matrix Green</option>
+            <option value="rainbow">Holographic</option>
+        </select>
+    </div>
+
+    <div class="mt-8 pt-6 border-t border-slate-700">
+        <button id="randomize" class="mb-3 py-2 px-4 bg-slate-700 hover:bg-slate-600 transition-colors">
+            Randomize Parameters
+        </button>
+        <button id="download" class="py-2 px-4 bg-blue-600 hover:bg-blue-500 transition-colors">
+            Export Image
+        </button>
+    </div>
+    
+    <div class="mt-6 text-xs text-slate-500 italic">
+        Tip: Adjust "Spread Angle" to see the sub-shapes separate from the vertices.
+    </div>
+</div>
+
+<div class="canvas-container" id="container">
+    <canvas id="fractalCanvas"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('fractalCanvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('container');
+
+    // State
+    let params = {
+        sides: 4,
+        depth: 4,
+        scale: 0.5,
+        rotation: 0,
+        spread: 0,
+        color: 'cyan'
+    };
+
+    // UI Elements
+    const inputs = {
+        shapeSelect: document.getElementById('shapeSelect'),
+        depth: document.getElementById('depth'),
+        scale: document.getElementById('scale'),
+        rotate: document.getElementById('rotate'),
+        spread: document.getElementById('spread'),
+        colorScheme: document.getElementById('colorScheme')
+    };
+
+    const labels = {
+        depthVal: document.getElementById('depthVal'),
+        scaleVal: document.getElementById('scaleVal'),
+        rotateVal: document.getElementById('rotateVal'),
+        spreadVal: document.getElementById('spreadVal')
+    };
+
+    function resize() {
+        const size = Math.min(container.clientWidth, container.clientHeight) * 0.9;
+        canvas.width = size;
+        canvas.height = size;
+        draw();
+    }
+
+    function getStrokeColor(level, total) {
+        const ratio = level / total;
+        switch(params.color) {
+            case 'cyan': return `rgba(34, 211, 238, ${1 - ratio * 0.7})`;
+            case 'sunset': return `rgba(251, 146, 60, ${1 - ratio * 0.7})`;
+            case 'matrix': return `rgba(74, 222, 128, ${1 - ratio * 0.7})`;
+            case 'rainbow': return `hsla(${ratio * 360}, 70%, 60%, ${1 - ratio * 0.7})`;
+            default: return '#fff';
+        }
+    }
+
+    function drawPolygon(x, y, radius, sides, rotation) {
+        if (sides === 0) { // Circle case
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.stroke();
+            return;
+        }
+
+        ctx.beginPath();
+        for (let i = 0; i < sides; i++) {
+            const angle = (i / sides) * Math.PI * 2 + rotation;
+            const px = x + Math.cos(angle) * radius;
+            const py = y + Math.sin(angle) * radius;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+    }
+
+    function generateFractal(x, y, radius, sides, rotation, level) {
+        if (level > params.depth) return;
+
+        ctx.strokeStyle = getStrokeColor(level, params.depth);
+        ctx.lineWidth = Math.max(0.5, (params.depth - level) * 0.8);
+        
+        drawPolygon(x, y, radius, sides, rotation);
+
+        // Branching logic
+        // We branch at every vertex of the current polygon
+        const branchCount = sides === 0 ? 4 : sides;
+        const nextRadius = radius * params.scale;
+
+        for (let i = 0; i < branchCount; i++) {
+            const angle = (i / branchCount) * Math.PI * 2 + rotation + (params.spread * Math.PI / 180);
+            const bx = x + Math.cos(angle) * radius;
+            const by = y + Math.sin(angle) * radius;
+            
+            generateFractal(
+                bx, 
+                by, 
+                nextRadius, 
+                sides, 
+                rotation + (params.rotation * Math.PI / 180), 
+                level + 1
+            );
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const initialRadius = canvas.width * 0.25;
+
+        generateFractal(centerX, centerY, initialRadius, params.sides, -Math.PI/2, 0);
+    }
+
+    // Event Handlers
+    function updateParams() {
+        params.sides = parseInt(inputs.shapeSelect.value);
+        params.depth = parseInt(inputs.depth.value);
+        params.scale = parseFloat(inputs.scale.value);
+        params.rotation = parseInt(inputs.rotate.value);
+        params.spread = parseInt(inputs.spread.value);
+        params.color = inputs.colorScheme.value;
+
+        labels.depthVal.innerText = params.depth;
+        labels.scaleVal.innerText = params.scale.toFixed(2);
+        labels.rotateVal.innerText = params.rotation;
+        labels.spreadVal.innerText = params.spread;
+
+        draw();
+    }
+
+    inputs.shapeSelect.onchange = updateParams;
+    inputs.depth.oninput = updateParams;
+    inputs.scale.oninput = updateParams;
+    inputs.rotate.oninput = updateParams;
+    inputs.spread.oninput = updateParams;
+    inputs.colorScheme.onchange = updateParams;
+
+    document.getElementById('randomize').onclick = () => {
+        inputs.depth.value = Math.floor(Math.random() * 3) + 3;
+        inputs.scale.value = (Math.random() * 0.4 + 0.3).toFixed(2);
+        inputs.rotate.value = Math.floor(Math.random() * 180) - 90;
+        inputs.spread.value = Math.floor(Math.random() * 90);
+        updateParams();
+    };
+
+    document.getElementById('download').onclick = () => {
+        const link = document.createElement('a');
+        link.download = `fractal-${params.sides}-sides.png`;
+        link.href = canvas.toDataURL();
+        link.click();
+    };
+
+    window.addEventListener('resize', resize);
+    window.onload = resize;
+
+</script>
+</body>
+</html>
